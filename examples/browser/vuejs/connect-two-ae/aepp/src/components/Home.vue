@@ -8,12 +8,24 @@
           Public Key <small>(from Wallet Aepp)</small>
         </div>
         <div v-if="addressResponse" class="p-2 w-3/4 bg-grey-lightest break-words">
-          {{addressResponse | responseToString}}
+          {{ addressResponse }}
         </div>
         <div v-else class="p-2 w-3/4 bg-grey-lightest break-words text-grey">
           Requesting Public Key from AE Wallet...
         </div>
       </div>
+      <button
+        class="w-32 rounded rounded-full bg-purple text-white py-2 px-4 pin-r mr-8 mt-4 text-xs"
+        @click="requestAccountAccess"
+      >
+        Request account access
+      </button>
+      <button
+        class="w-32 rounded rounded-full bg-purple text-white py-2 px-4 pin-r mr-8 mt-4 text-xs"
+        @click="clearStorage"
+      >
+        Clear localStorage
+      </button>
       <div v-if="heightResponse" class="bg-green w-full flex flex-row font-mono border border-b">
         <div class="p-2 w-1/4">
           Height
@@ -173,7 +185,12 @@
 
 <script>
   //  is a webpack alias present in webpack.config.js
-  import { Aepp } from '@aeternity/aepp-sdk/es'
+  import { Aepp, Universal } from 'AE_SDK_MODULES'
+  import Aens from 'AE_SDK_MODULES/ae/aens'
+  import { ContractAPI } from 'AE_SDK_MODULES/ae/contract'
+  import Oracle from 'AE_SDK_MODULES/ae/oracle'
+  import Ae from 'AE_SDK_MODULES/ae/universal';
+  import * as Crypto from 'AE_SDK_MODULES/utils/crypto'
 
   const errorAsField = async fn => {
     try {
@@ -191,9 +208,9 @@
         addressResponse: null,
         heightResponse: null,
         nodeInfoResponse: null,
-        spendTo: null,
-        spendAmount: null,
-        spendPayload: null,
+        spendTo: 'ak_QcxSaniCR8VZrQpDqYcNuKvZDMfUzG6QTwEZhzRGiQm8Bsjwi',
+        spendAmount: 345,
+        spendPayload: "qwe",
         spendResponse: null,
         contractCode: `contract Identity =
       type state = ()
@@ -201,7 +218,7 @@
         compileBytecodeResponse: null,
         contractInitState: [],
         deployResponse: null,
-        callResponse: null
+        callResponse: null,
       }
     },
     filters: {
@@ -210,7 +227,14 @@
         ? `Error: ${response.error}`
         : JSON.stringify(response.result, null, 4),
     },
+
     methods: {
+      async requestAccountAccess() {
+        return this.client.address();
+      },
+      clearStorage() {
+        window.localStorage.clear();
+      },
       async spend () {
         this.spendResponse = await errorAsField(this.client.spend(
           this.spendAmount,
@@ -242,7 +266,7 @@
       },
       async getReverseWindow() {
         const iframe = document.createElement('iframe')
-        iframe.src = prompt('Enter wallet URL', 'http://localhost:9000')
+        iframe.src = 'http://base.aepps.com'// prompt('Enter wallet URL', 'http://base.aepps.com')
         iframe.style.display = 'none'
         document.body.appendChild(iframe)
         await new Promise(resolve => {
@@ -257,12 +281,63 @@
       }
     },
     async created () {
-      this.client = await Aepp({
-        parent: this.runningInFrame ? window.parent : await this.getReverseWindow()
-      })
-      this.addressResponse = await errorAsField(this.client.address())
-      this.heightResponse = await errorAsField(this.client.height())
-      this.nodeInfoResponse = await errorAsField(this.client.getNodeInfo())
+      const toRlp = (o) => Object.values(o).map(v => typeof v === "object" ? toRlp(v) : v);
+      const rlpToStrings = (o) => Object.values(o).map(v => typeof v === "Array" ? rlpToStrings(v) : v.toString());
+
+      const buildUrl = (...params) => {
+        const rlp = Crypto.encodeBase58Check(Crypto.encode(params))
+        const url = new URL('aepp-base://');
+        url.searchParams.set('d', rlp);
+        return url;
+      }
+
+      this.client = await Ae.compose({
+        methods: {
+          address: () => {
+            if (this.addressResponse) return this.addressResponse;
+            const url = buildUrl('address', window.location.origin + '/account-access');
+            window.location.href = url;
+          },
+          signTransaction: txBase64 => {
+            console.log(txBase64);
+            const url = buildUrl('signTransaction', window.location.origin + '/transaction-signed', txBase64);
+            window.location.href = url;
+          },
+        },
+      })({
+        url: 'https://sdk-testnet.aepps.com',
+        internalUrl: 'https://sdk-testnet.aepps.com',
+        compilerUrl: 'https://compiler.aepps.com',
+      });
+      // await aepp.spend(1000, 'ak_MxBw2jMz9otWXw5pGKze7uKvS67bxixsYTgbi8crTtUa5BJKt');
+
+      this.addressResponse = localStorage.getItem('address');
+      const signedTx = localStorage.getItem('signedTx');
+      if (signedTx) {
+        this.spendResponse = await this.client.sendTransaction(signedTx);
+        localStorage.removeItem('signedTx');
+      }
+      // const url = new URL('aepp-base://');
+      // const rlp = Crypto.encodeBase58Check(Crypto.encode(['address', window.location.origin]))
+      // url.searchParams.set('d', rlp);
+
+      // const DEEPLINK_METHOD = 0;
+      // const DEEPLINK_CALLBACK_URL = 1;
+
+      // const params = rlpToStrings(Crypto.decode(Crypto.decodeBase58Check(url.searchParams.get('d'))))
+      // console.log(params);
+
+      // if (params[DEEPLINK_METHOD] === 'address') {
+      //   const callbackUrl = new URL(params[DEEPLINK_CALLBACK_URL])
+      //   const address = ['htatp:', 'httaps:'].includes(callbackUrl.protocol) ? address(new App(callbackUrl.origin)) : '';
+      // }
+
+      // this.client = await Aepp({
+      //   parent: this.runningInFrame ? window.parent : await this.getReverseWindow()
+      // })
+      // this.addressResponse = await errorAsField(this.client.address())
+      // this.heightResponse = await errorAsField(this.client.height())
+      // this.nodeInfoResponse = await errorAsField(this.client.getNodeInfo())
     }
   }
 </script>

@@ -25,6 +25,7 @@
 import stampit from '@stamp/it'
 import AsyncInit from '../utils/async-init'
 import * as R from 'ramda'
+import * as Crypto from '../utils/crypto'
 
 function post (method) {
   return function (...params) {

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "NODE_ENV='prod' webpack -p",
-    "start:dev": "NODE_ENV='dev' webpack-dev-server --config ./webpack.config.js"
+    "start:dev": "set NODE_ENV='dev' && webpack-dev-server --history-api-fallback --config ./webpack.config.js"
   },
   "main": "src/index.js",
   "repository": "https://github.com/aeternity/aepp-sdk-js",
